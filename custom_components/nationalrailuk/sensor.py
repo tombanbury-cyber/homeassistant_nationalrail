@@ -121,6 +121,8 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
             data["terminus"] = None
             data["platform"] = None
             data["length"] = None
+            data["operator"] = None
+            data["service_type"] = None
             data["perturbations"] = False
 
             for each in data["trains"]:
@@ -144,6 +146,8 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
                     data["terminus"] = each["terminus"]
                     data["platform"] = each["platform"]
                     data["length"] = each["length"]
+                    data["operator"] = each["operator"]
+                    data["service_type"] = each["service_type"]
 
                 data["perturbations"] = data["perturbations"] or each["perturbation"]
 
