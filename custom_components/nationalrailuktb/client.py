@@ -165,7 +165,8 @@ class NationalRailClient:
 
             destination = []
             if len(self.destinations) == 0:
-                destination = destinations_list[-1]
+                # destination = destinations_list[-1]
+                destination = [destinations_list[-1]]  # Wrap in a list
             else:
                 for each in destinations_list:
                     if each["crs"] in self.destinations:
