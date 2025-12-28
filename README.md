@@ -7,9 +7,23 @@ This allows you to have a schedule of the train at your station in your home ass
 
 1. Register with national rail to get an api token [here](http://realtime.nationalrail.co.uk/OpenLDBWSRegistration/)
 2. Copy the custom_components/nationalrailuk folder into your config/custom_components folder and restart home assistant
-3. Find the crs code for your origin and destination station using the [National Rail website](https://www.nationalrail.co.uk/). If you live in Weybridge and commutte to Waterloo, the codes are WYB and WAT
-4. You need to add 2 integration for for monitoring your morning journey WYB to WAT and one for your evening route WAT to WYB
-5. This should create 2 sensors `sensor.train_schedule_wyb_wat` and `sensor.train_schedule_wat_wyb`
+3. Find the crs code for your origin station (and optionally destination stations) using the [National Rail website](https://www.nationalrail.co.uk/). For example, if you live in Weybridge and commute to Waterloo, the codes are WYB and WAT
+
+## Configuration Options
+
+### Option 1: Filter by Destination (Integration Level)
+If you want to pre-filter trains at the integration level:
+- Add an integration for monitoring your morning journey WYB to WAT
+- Add another integration for your evening route WAT to WYB
+- This creates sensors like `sensor.train_schedule_wyb_wat` and `sensor.train_schedule_wat_wyb`
+- Each integration makes a separate API call
+
+### Option 2: No Destination Filter (Card Level)
+If you want maximum flexibility and fewer API calls:
+- Add a single integration for your station (e.g., WYB) **without specifying destinations**
+- The integration will retrieve all departures from that station
+- Use companion cards like [nationalrail-status-card](https://github.com/ChevronTango/nationalrail-status-card) to filter by destination in the UI
+- This approach uses only one API call per station and allows multiple cards with different filters
 
 # Integration within the UI
 

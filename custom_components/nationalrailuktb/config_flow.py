@@ -49,8 +49,13 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     # validate station input
 
     try:
+        destinations_list = (
+            data[CONF_DESTINATIONS].split(",") 
+            if data.get(CONF_DESTINATIONS) 
+            else []
+        )
         my_api = NationalRailClient(
-            data[CONF_TOKEN], data[CONF_STATION], data[CONF_DESTINATIONS].split(",")
+            data[CONF_TOKEN], data[CONF_STATION], destinations_list
         )
         res = await my_api.async_get_data()
     except NationalRailClientInvalidInput as err:
@@ -63,7 +68,10 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     # InvalidAuth
 
     # Return info that you want to store in the config entry.
-    return {"title": f'Train Schedule {data["station"]} -> {data["destinations"]}'}
+    if data.get(CONF_DESTINATIONS):
+        return {"title": f'Train Schedule {data["station"]} -> {data["destinations"]}'}
+    else:
+        return {"title": f'Train Schedule {data["station"]} (All Destinations)'}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -82,9 +90,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         user_input[CONF_STATION] = user_input[CONF_STATION].strip().upper()
-        user_input[CONF_DESTINATIONS] = (
-            user_input[CONF_DESTINATIONS].strip().replace(" ", "").upper()
-        )
+        if user_input.get(CONF_DESTINATIONS):
+            user_input[CONF_DESTINATIONS] = (
+                user_input[CONF_DESTINATIONS].strip().replace(" ", "").upper()
+            )
+        else:
+            user_input[CONF_DESTINATIONS] = ""
 
         errors = {}
 
