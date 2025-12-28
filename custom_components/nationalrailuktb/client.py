@@ -202,8 +202,8 @@ class NationalRailClient:
             train["terminus"] = terminus
             train["destinations"] = arrival_dest
             train["platform"] = service["platform"]
-            train["length"] = service["length"]
-            train["operator"] = service.get("operator") or service.get("operatorName")
+            train["length"] = service. get("length")  # ← Fixed here
+            train["operator"] = service. get("operator") or service.get("operatorName")
             train["service_type"] = service.get("serviceType")
             train["perturbation"] = perturbation
 
