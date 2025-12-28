@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
 )
+from homeassistant.helpers import storage
 
 from .client import NationalRailClient
 from .const import (
@@ -27,11 +28,25 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{DOMAIN}. token"
+
+
+async def get_stored_token(hass) -> str | None:
+    """Get the stored API token if it exists."""
+    store = storage.Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    data = await store.async_load()
+    return data.get("token") if data else None
+
 
 async def async_setup_entry(hass, entry, async_add_entities):
     """Config entry example."""
 
+    # Try to get token from entry, fallback to stored token
     token = entry.data.get(CONF_TOKEN)
+    if not token:
+        token = await get_stored_token(hass)
+    
     station = entry.data.get(CONF_STATION)
     destinations = entry.data.get(CONF_DESTINATIONS)
 
@@ -45,7 +60,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class NationalRailScheduleCoordinator(DataUpdateCoordinator):
-    description: str = None
+    description:  str = None
     friendly_name: str = None
     sensor_name: str = None
 
@@ -54,9 +69,9 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
-            # Name of the data. For logging purposes.
+            # Name of the data.  For logging purposes.
             name=DOMAIN,
-            # Polling interval. Will only be polled if there are subscribers.
+            # Polling interval.  Will only be polled if there are subscribers.
             update_interval=timedelta(minutes=REFRESH),
         )
         destinations = (
@@ -71,7 +86,7 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
         self.last_data_refresh = None
 
     async def _async_update_data(self):
-        """Fetch data from API endpoint.
+        """Fetch data from API endpoint. 
 
         This is the place to pre-process the data to lookup tables
         so entities can quickly look up their data.
@@ -82,7 +97,7 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
             or (time.time() - self.last_data_refresh) > POLLING_INTERVALE * 60
             or (
                 self.data["next_train_scheduled"] is not None
-                and datetime.now(self.data["next_train_scheduled"].tzinfo)
+                and datetime.now(self.data["next_train_scheduled"]. tzinfo)
                 >= (
                     self.data["next_train_scheduled"]
                     - timedelta(minutes=HIGH_FREQUENCY_REFRESH)
@@ -90,11 +105,11 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
                 and not self.data["next_train_expected"] == "Cancelled"
             )
         ):
-            # try:
+            # try: 
             # Note: asyncio.TimeoutError and aiohttp.ClientError are already
             # handled by the data update coordinator.
             async with async_timeout.timeout(30):
-                data = await self.my_api.async_get_data()
+                data = await self.my_api. async_get_data()
                 self.last_data_refresh = time.time()
             # except aiohttp.ClientError as err:
             #    raise UpdateFailed(f"Error communicating with API: {err}") from err
@@ -110,7 +125,7 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
             if self.friendly_name is None:
                 self.friendly_name = f"Train schedule at {data['station']} station"
                 if len(self.destinations) == 1:
-                    self.friendly_name += f" for {self.destinations[0]}"
+                    self. friendly_name += f" for {self.destinations[0]}"
                 elif len(self.destinations) > 1:
                     self.friendly_name += f" for {'&'.join(self.destinations)}"
 
@@ -162,9 +177,9 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
 
 
 class NationalRailSchedule(CoordinatorEntity):
-    """An entity using CoordinatorEntity.
+    """An entity using CoordinatorEntity. 
 
-    The CoordinatorEntity class provides:
+    The CoordinatorEntity class provides: 
       should_poll
       async_update
       async_added_to_hass
@@ -178,7 +193,7 @@ class NationalRailSchedule(CoordinatorEntity):
     def __init__(self, coordinator):
         """Pass coordinator to CoordinatorEntity."""
         super().__init__(coordinator)
-        self.entity_id = f"sensor.{coordinator.data['name'].lower()}"
+        self.entity_id = f"sensor.{coordinator.data['name']. lower()}"
 
     @property
     def extra_state_attributes(self):
@@ -193,4 +208,4 @@ class NationalRailSchedule(CoordinatorEntity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self.coordinator.data["next_train_expected"]
+        return self. coordinator.data["next_train_expected"]
