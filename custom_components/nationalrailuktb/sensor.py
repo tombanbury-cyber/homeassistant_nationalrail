@@ -59,7 +59,11 @@ class NationalRailScheduleCoordinator(DataUpdateCoordinator):
             # Polling interval. Will only be polled if there are subscribers.
             update_interval=timedelta(minutes=REFRESH),
         )
-        destinations = destinations.split(",")
+        destinations = (
+            destinations.split(",") 
+            if destinations 
+            else []
+        )
         self.station = station
         self.destinations = destinations
         self.my_api = NationalRailClient(token, station, destinations)
