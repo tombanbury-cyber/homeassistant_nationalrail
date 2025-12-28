@@ -10,7 +10,8 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 from homeassistant. data_entry_flow import FlowResult
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant. exceptions import HomeAssistantError
+from homeassistant.helpers import storage
 
 from .client import (
     NationalRailClient,
@@ -19,18 +20,26 @@ from .client import (
 )
 from .const import CONF_DESTINATIONS, CONF_STATION, CONF_TOKEN, DOMAIN
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = logging. getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol. Schema(
-    {
-        vol.Required(CONF_TOKEN): str,
-        vol.Required(CONF_STATION): str,
-        vol.Optional(CONF_DESTINATIONS): str,
-    }
-)
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{DOMAIN}.token"
 
 
-async def validate_input(hass:  HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
+async def get_stored_token(hass:  HomeAssistant) -> str | None:
+    """Get the stored API token if it exists."""
+    store = storage.Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    data = await store.async_load()
+    return data.get("token") if data else None
+
+
+async def save_token(hass: HomeAssistant, token: str) -> None:
+    """Save the API token for reuse."""
+    store = storage. Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    await store.async_save({"token": token})
+
+
+async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect. 
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
@@ -62,7 +71,7 @@ async def validate_input(hass:  HomeAssistant, data: dict[str, Any]) -> dict[str
         raise InvalidInput() from err
 
     # Return info that you want to store in the config entry. 
-    if data. get(CONF_DESTINATIONS):
+    if data.get(CONF_DESTINATIONS):
         return {
             "title": f'Train Schedule {station_name} -> {data["destinations"]}',
             "station_name": station_name,
@@ -70,7 +79,7 @@ async def validate_input(hass:  HomeAssistant, data: dict[str, Any]) -> dict[str
     else:
         return {
             "title": f'Train Schedule {station_name} (All Destinations)',
-            "station_name":  station_name,
+            "station_name": station_name,
         }
 
 
@@ -84,12 +93,36 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
+        # Get stored token if available
+        stored_token = await get_stored_token(self.hass)
+        
         if user_input is None:
+            # Build schema with stored token as default
+            if stored_token:
+                step_schema = vol.Schema(
+                    {
+                        vol.Optional(CONF_TOKEN, default=stored_token): str,
+                        vol.Required(CONF_STATION): str,
+                        vol.Optional(CONF_DESTINATIONS): str,
+                    }
+                )
+                description = "Using saved API token.  You can change it if needed."
+            else:
+                step_schema = vol.Schema(
+                    {
+                        vol. Required(CONF_TOKEN): str,
+                        vol.Required(CONF_STATION): str,
+                        vol.Optional(CONF_DESTINATIONS): str,
+                    }
+                )
+                description = "Enter your National Rail API token"
+            
             return self.async_show_form(
                 step_id="user", 
-                data_schema=STEP_USER_DATA_SCHEMA,
+                data_schema=step_schema,
                 description_placeholders={
-                    "station_help": "Enter a 3-letter station code (e.g., WAT for Waterloo, PAD for Paddington)"
+                    "token_help": description,
+                    "station_help": "Enter a 3-letter station code (e. g., WAT for Waterloo, PAD for Paddington)"
                 }
             )
 
@@ -105,20 +138,41 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             info = await validate_input(self. hass, user_input)
-        except InvalidToken: 
+        except InvalidToken:
             errors["base"] = "invalid_token"
         except InvalidInput:
             errors["base"] = "invalid_station_input"
-        except Exception:  # pylint: disable=broad-except
+        except Exception:   # pylint: disable=broad-except
             _LOGGER.exception("Unexpected exception")
             errors["base"] = "unknown"
         else:
+            # Save the token for future use
+            await save_token(self.hass, user_input[CONF_TOKEN])
+            
             # Show confirmation with human-readable station name
             return self.async_create_entry(title=info["title"], data=user_input)
 
+        # Show form again with errors, preserving the schema
+        if stored_token:
+            step_schema = vol.Schema(
+                {
+                    vol.Optional(CONF_TOKEN, default=stored_token): str,
+                    vol.Required(CONF_STATION): str,
+                    vol. Optional(CONF_DESTINATIONS): str,
+                }
+            )
+        else:
+            step_schema = vol.Schema(
+                {
+                    vol.Required(CONF_TOKEN): str,
+                    vol.Required(CONF_STATION): str,
+                    vol.Optional(CONF_DESTINATIONS): str,
+                }
+            )
+        
         return self.async_show_form(
             step_id="user", 
-            data_schema=STEP_USER_DATA_SCHEMA, 
+            data_schema=step_schema, 
             errors=errors,
             description_placeholders={
                 "station_help": "Enter a 3-letter station code (e.g., WAT for Waterloo, PAD for Paddington)"
@@ -158,24 +212,29 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             errors = {}
 
             try:
-                # Validate using the existing token
-                token = self.config_entry. data.get(CONF_TOKEN)
-                validate_data = {
-                    CONF_TOKEN:  token,
-                    CONF_STATION: user_input[CONF_STATION],
-                    CONF_DESTINATIONS: user_input[CONF_DESTINATIONS],
-                }
-                info = await validate_input(self.hass, validate_data)
+                # Use stored token or entry token
+                stored_token = await get_stored_token(self.hass)
+                token = stored_token or self.config_entry.data.get(CONF_TOKEN)
+                
+                if not token:
+                    errors["base"] = "no_token"
+                else: 
+                    validate_data = {
+                        CONF_TOKEN:  token,
+                        CONF_STATION: user_input[CONF_STATION],
+                        CONF_DESTINATIONS: user_input[CONF_DESTINATIONS],
+                    }
+                    info = await validate_input(self. hass, validate_data)
             except InvalidToken:
                 errors["base"] = "invalid_token"
             except InvalidInput:
                 errors["base"] = "invalid_station_input"
-            except Exception:   # pylint: disable=broad-except
-                _LOGGER. exception("Unexpected exception")
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
                 # Update the config entry with new data
-                self. hass.config_entries.async_update_entry(
+                self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     data={
                         CONF_TOKEN:  token,
@@ -186,7 +245,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 )
                 # Trigger reload
                 await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-                return self. async_create_entry(title="", data={})
+                return self.async_create_entry(title="", data={})
 
             # Show form again with errors
             options_schema = vol.Schema(
@@ -197,7 +256,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     ): str,
                     vol.Optional(
                         CONF_DESTINATIONS,
-                        default=self.config_entry.data. get(CONF_DESTINATIONS, ""),
+                        default=self.config_entry.data.get(CONF_DESTINATIONS, ""),
                     ): str,
                 }
             )
@@ -206,7 +265,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 data_schema=options_schema, 
                 errors=errors,
                 description_placeholders={
-                    "station_help":  "Enter a 3-letter station code (e.g., WAT for Waterloo, PAD for Paddington)",
+                    "station_help": "Enter a 3-letter station code (e.g., WAT for Waterloo, PAD for Paddington)",
                     "dest_help": "Optional:  Enter destination station codes separated by commas (e.g., CHK,VIC)"
                 }
             )
@@ -217,14 +276,15 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         
         # Try to get the human-readable name
         try:
-            token = self.config_entry.data.get(CONF_TOKEN)
+            stored_token = await get_stored_token(self.hass)
+            token = stored_token or self.config_entry.data.get(CONF_TOKEN)
             destinations_list = (
-                self. config_entry.data.get(CONF_DESTINATIONS, "").split(",")
-                if self. config_entry.data.get(CONF_DESTINATIONS)
+                self.config_entry.data.get(CONF_DESTINATIONS, "").split(",")
+                if self.config_entry.data.get(CONF_DESTINATIONS)
                 else []
             )
             my_api = NationalRailClient(token, current_station, destinations_list)
-            res = await my_api. async_get_data()
+            res = await my_api.async_get_data()
             station_display = f"{res.get('station', current_station)} ({current_station})"
         except Exception: 
             _LOGGER.debug("Could not fetch station name for display")
