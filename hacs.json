@@ -1,5 +1,6 @@
 {
-    "name": "homeassistant_nationalrail_tb",
+    "name": "National Rail UK Train Schedules (TB)",
+    "domain": "homeassistant_nationalrail_tb",
     "render_readme": true,
     "country": "GB"
   }
